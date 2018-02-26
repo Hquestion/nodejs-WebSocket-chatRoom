@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="../javascripts/jquery-3.3.1.min.js"></script>
+    <script src="../javascripts/ChatRecord.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding:0;
+            box-sizing: border-box;
+        }
+        .container {
+            width: 1000px;
+            height: 100vh;
+            border: 1px solid #ccc;
+            margin: 0 auto;
+        }
+        .container:after {
+            clear: both;
+            content: '\20';
+            display: block;
+        }
+        .left {
+            float: left;
+            width: 700px;
+            height: 100%;
+        }
+        .right {
+            float: right;
+            width: 297px;
+            height: 100%;
+            border-left: 1px solid #ccc;
+        }
+        .chat-history {
+            width: 100%;
+            height: calc(100% - 150px);
+            background: #fff;
+            padding: 10px;
+            overflow: auto;
+        }
+        .chat-input {
+            width: 100%;
+            height: 150px;
+            border-top: 1px solid #ccc;
+        }
+        .chat-input   .send-text {
+            width: 100%;
+            height: 50px;
+            position: relative;
+        }
+        textarea {
+            width: calc(100% - 60px);
+            height: 100%;
+            border: none;
+            outline: none;
+            font-size: 16px;
+            line-height: 20px;
+            resize: none;
+            border-bottom: 1px solid #bbb;
+        }
+        .button {
+            width: 50px;
+            height: 30px;
+            position: absolute;
+            top: 10px;
+            right: 5px;
+            background: #00B7FF;
+            cursor: pointer;
+            text-align: center;
+            line-height: 30px;
+            color: #fff;
+        }
+        .button.disabled {
+            background: #999;
+            cursor: default;
+            pointer-events: none;
+        }
+        .extension > div {
+            width: 80px;
+            height: 80px;
+            border-radius: 5px;
+            background: #00B7FF;
+            text-align: center;
+            line-height: 80px;
+            color: #fff;
+            display: inline-block;
+            cursor: pointer;
+            margin: 10px;
+        }
+        .room-item {
+            width: 80%;
+            height: 40px;
+            border: 1px solid #00B7FF;
+            color: #000;
+            text-align: center;
+            line-height: 40px;
+            margin: 5px auto 0;
+            cursor: pointer;
+        }
+        .room-item.active {
+            background: #00B7FF;
+            color: #fff;
+        }
+        .information-area {
+            border-top: 1px solid #ccc;
+            margin-top: 15px;
+            height: calc(100% - 105px);
+            width: 100%;
+            overflow: hidden;
+        }
+        .chat-record {
+            padding: 5px;
+            width: 100%;
+            min-height: 40px;
+        }
+        .chat-record .user-input,  .chat-record .user-name {
+            display: inline-block;
+        }
+        .chat-record .user-input {
+            background: #00B7FF;
+            border-radius: 5px;
+            min-height: 30px;
+            margin-left: 15px;
+            font-size: 18px;
+            color: #fff;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="left chat-view">
+        <div class="chat-history">
+
+        </div>
+        <div class="chat-input">
+            <div class="send-text">
+                <textarea rows="1" id="user-input"></textarea>
+                <div class="button" onclick="sendMsg()">发送</div>
+            </div>
+            <div class="extension">
+                <div id="send-image">发送图片</div>
+                <div id="send-video">发送视频</div>
+            </div>
+        </div>
+    </div>
+    <div class="right room-list">
+        <div class="room-item" data-id="1">
+            聊天室1
+        </div>
+        <div class="room-item" data-id="2">
+            聊天室2
+        </div>
+        <div class="information-area">
+
+        </div>
+    </div>
+</div>
+<script>
+    var ws = new WebSocket("ws://192.168.0.116:3000");
+    var userNickName = '';
+    var currentRoom;
+    ws.onopen = function(e){
+        console.error('connected..');
+        console.log('请选择聊天室。。。');
+    };
+
+    ws.onmessage = function(e){
+        var message = JSON.parse(e.data);
+        //如果时用户发送的消息
+        if(message.type === 'USER_MSG') {
+            var data = message.data;
+            var record = new ChatRecord(data.user, data.content, data.type, false);
+            record.init();
+            record.render(document.querySelector('.chat-history'));
+        }else {
+            //其他消息待处理
+            var msg = message.data.message;
+            $('.information-area').append($('<div>' + msg + '</div>'));
+        }
+    };
+    window.onbeforeunload = function(){ws.close(); }
+
+    function sendMsg(){
+        var input = document.querySelector('textarea').value;
+        if(!$.trim(input)) {
+            alert('请输入内容！');
+            return;
+        }
+        var msg = {
+            user: ws,
+            content: input,
+            room: currentRoom || ''
+        };
+        $('textarea').val('');
+        notificateServer(msg, 'MSG');
+    }
+
+    function initUI (){
+        if(typeof currentRoom === 'undefined') {
+            $('.button').addClass('disabled');
+        }else {
+            $('.button').removeClass('disabled');
+        }
+
+        $('.room-item').on('click', function(e){
+            $('.room-item').removeClass('active');
+            $(this).addClass('active');
+            var roomId = $(this).attr('data-id');
+            enterRoom(roomId);
+            $('.button').removeClass('disabled');
+        });
+    }
+
+    // 用户进入房间，本地记录房间id，同时通知后台用户进入房间
+    function enterRoom(roomid) {
+        var data = {
+            room: roomid,
+            beforeRoom: currentRoom || ''
+        };
+        notificateServer(data, 'JOIN');
+        currentRoom = roomid;
+    }
+
+    function notificateServer(data, type){
+        var content = {
+            data: data,
+            type: type
+        };
+        ws.send(JSON.stringify(content));
+    }
+
+    initUI();
+</script>
+</body>
+</html>
