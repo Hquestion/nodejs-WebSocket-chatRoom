@@ -5,7 +5,7 @@ var ChatRecord = function(user, content, type, isSelf){
     this.isSelf = !!isSelf;
     this.$template = $('<div class="chat-record"><div class="user-name"></div><div class="user-input"></div></div>');
     if(this.isSelf) {
-        this.template.addClass('self');
+        this.$template.addClass('self');
     }
 };
 

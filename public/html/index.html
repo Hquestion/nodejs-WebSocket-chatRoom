@@ -116,7 +116,7 @@
             min-height: 40px;
         }
         .chat-record .user-input,  .chat-record .user-name {
-            display: inline-block;
+            float: left;
         }
         .chat-record .user-input {
             background: #00B7FF;
@@ -126,6 +126,19 @@
             font-size: 18px;
             color: #fff;
             padding: 10px;
+        }
+        .chat-record:after {
+            clear: both;
+            content: '\20';
+            display: block;
+        }
+        .chat-record.self .user-input, .chat-record.self .user-name {
+            float: right;
+        }
+        .chat-record.self .user-input {
+            margin-right: 15px;
+            margin-left: 0;
+            background: #6dab83;
         }
     </style>
 </head>
@@ -160,7 +173,8 @@
 </div>
 <script>
     var ws = new WebSocket("ws://192.168.0.116:3000");
-    var userNickName = '';
+    var userId = '';
+    var userName = '';
     var currentRoom;
     ws.onopen = function(e){
         console.error('connected..');
@@ -172,13 +186,17 @@
         //如果时用户发送的消息
         if(message.type === 'USER_MSG') {
             var data = message.data;
-            var record = new ChatRecord(data.user, data.content, data.type, false);
+            var record = new ChatRecord(data.user, data.content, data.type, data.wsId === userId);
             record.init();
             record.render(document.querySelector('.chat-history'));
-        }else {
+            $('.chat-history').scrollTop(99999);
+        }else if(message.type === 'INFO'){
             //其他消息待处理
             var msg = message.data.message;
             $('.information-area').append($('<div>' + msg + '</div>'));
+        }else if(message.type === 'INIT') {
+            userId = message.data.id;
+            userName = message.data.userName;
         }
     };
     window.onbeforeunload = function(){ws.close(); }
@@ -190,7 +208,7 @@
             return;
         }
         var msg = {
-            user: ws,
+            user: userId,
             content: input,
             room: currentRoom || ''
         };

@@ -3,6 +3,7 @@ var wss = null;
 var rooms = [1, 2];
 var userNames = {};
 var userRooms = {};
+var userInRoom = {};
 
 function initSocketServer(server){
     if(server) {
@@ -19,13 +20,14 @@ function initSocketServer(server){
         var userCount = wss.clients.size;
         //分配用户昵称
         assignUserName(ws, userCount, userNames);
+        userInit(ws);
 
         ws.on('message', function(msg){
             handlerMessage(msg, ws);
         });
 
-        ws.on('close', function() {
-            console.log("client closed connection!");
+        ws.on('close', function(e) {
+            leaveRoom(e, ws);
         });
 
         ws.on('error', function(e) {
@@ -51,6 +53,17 @@ function handlerMessage(message, ws){
 
 function assignUserName(ws, count, userNames){
     userNames[ws.id] = '访客' + count;
+}
+
+function userInit(ws){
+    var data = {
+        id: ws.id,
+        userName: userNames[ws.id]
+    };
+    broadcast({
+        type: 'INIT',
+        data: data
+    }, ws);
 }
 
 function userJoinRoom(data, ws){
@@ -81,6 +94,18 @@ function userJoinRoom(data, ws){
             }
         }, ws);
     }
+    userInRoom[ws.id] = toEnterRoom;
+}
+
+function leaveRoom(e, ws){
+    var room = userInRoom[ws.id];
+    var index = userRooms[room].findIndex(function(item){
+        return item.id === ws.id;
+    });
+    if(index > -1) {
+        userRooms[room].splice(index, 1);
+    }
+    console.log(userNames[ws.id] + '离开了房间:', room);
 }
 
 function broadcast(message, ws){
@@ -94,7 +119,7 @@ function broadcast(message, ws){
             user: userNames[ws.id],
             content: data.content,
             type: data.type || 'TEXT',
-            isSelf: data.user.id === ws.id
+            wsId: ws.id
         };
         roomClients.forEach(function(client, index){
             client.send(JSON.stringify({
@@ -102,6 +127,8 @@ function broadcast(message, ws){
                 data: toSendData
             }));
         });
+    }else if(message.type === 'INIT') {
+        ws.send(JSON.stringify(message));
     }
 }
 
